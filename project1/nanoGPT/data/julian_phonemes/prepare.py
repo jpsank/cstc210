@@ -23,9 +23,9 @@ print(f"length of dataset in characters: {len(text):,}")
 data = []
 phones_cache = {}
 for verse in tqdm(text.split("\n\n")):
-    data.append("[SOV]")
+    data.append("\n\n")
     for line in verse.split("\n"):
-        data.append("[SOL]")
+        data.append("\n")
         for word in line.split():
             word = word.lower().strip('.,!?-)(]["}{')
             if word in phones_cache:
@@ -38,8 +38,6 @@ for verse in tqdm(text.split("\n\n")):
                 data += tokens
             else:
                 data.append("?")
-        data.append("[EOL]")
-    data.append("[EOV]")
 
 print(f"length of dataset in phonemes: {len(data):,}")
 
