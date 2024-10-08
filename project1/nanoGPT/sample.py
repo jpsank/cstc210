@@ -6,6 +6,8 @@ import pickle
 from contextlib import nullcontext
 import torch
 import tiktoken
+import pronouncing
+import random
 from model import GPTConfig, GPT
 
 # -----------------------------------------------------------------------------
@@ -64,8 +66,31 @@ if load_meta:
         meta = pickle.load(f)
     # TODO want to make this more general to arbitrary encoder/decoder schemes
     stoi, itos = meta['stoi'], meta['itos']
-    encode = lambda s: [stoi[c] for c in s]
-    decode = lambda l: ''.join([itos[i] for i in l])
+    # encode = lambda s: [stoi[c] for c in s]
+    # decode = lambda l: ''.join([itos[i] for i in l])
+    def encode(text):
+        data = []
+        phones_cache = {}
+        for verse in text.split("\n\n"):
+            data.append("\n\n")
+            for line in verse.split("\n"):
+                data.append("\n")
+                for word in line.split():
+                    word = word.lower().strip('.,!?-)(]["}{')
+                    if word in phones_cache:
+                        phones = phones_cache[word]
+                    else:
+                        phones = pronouncing.phones_for_word(word)
+                        phones_cache[word] = phones
+                    if phones:
+                        tokens = random.choice(phones).split()
+                        data += tokens
+                    else:
+                        data.append("?")
+        return [stoi[ph] for ph in data]
+    def decode(ids):
+        return ' '.join([itos[i] for i in ids])
+        
 else:
     # ok let's assume gpt-2 encodings by default
     print("No meta.pkl found, assuming GPT-2 encodings...")

@@ -19,6 +19,7 @@ with open(input_file_path, 'r') as f:
     text = f.read()
 print(f"length of dataset in characters: {len(text):,}")
 
+
 # tokenize the dataset
 data = []
 phones_cache = {}
