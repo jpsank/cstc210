@@ -41,6 +41,19 @@ pip3 install librosa opencv-python pygame torchvision tqdm pillow
 9. Process data with `python process_video.py` to split audio into chunks using `librosa`, extract image frames with `python-opencv`, and encode audio chunks into latent vectors using the exported RAVE model.
 10. Train custom decoder model on frames and latent vectors with `python latent-to-image.py`. This will save as a `.pth` file and generate images displayed in a live `pygame` window from audio input.
 
+## Preliminary Results
+After training RAVE on the hip hop mixes and the custom decoder model on Kendrick Lamar's "Alright" music video, I was able to generate images from audio input. The quality of the images is not great, but it's a start. The custom decoder model is not trained for very long (only 20 epochs). The images are generated in real time from audio input, so it's a proof of concept that the pipeline works.
+
+![Live Music Video Generator](screenshots/live-audio.gif)
+
+As a control, I had it generate images from the original audio of the "Alright" music video. The images are not perfect, but they contain forms and smooth motion.
+
+![Control Music Video Generator](screenshots/control.gif)
+
+I tested the decoder model separately on a test set of random 128-length latent vectors that map to images of sine waves based on the latent features. The model was able to reproduce the sine waves with some noise. On the right is one of the original sine wave images, and on the left is the corresponding image generated from the latent vector.
+
+![Sine Wave Test](screenshots/sine-wave-test.png)
+
 ## Future Work
 The next steps for this project are to:
 - Train the custom decoder model longer and on more data to improve the quality of the generated images. I just trained it on my local computer on Kendrick Lamar's "Alright" music video, but I ran into memory limits on the HPC (because I designed the dataloader to load everything into memory, which won't scale to larger training data). Also, "Alright" is all black and white, so I may want to use a more colorful music video.
