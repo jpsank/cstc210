@@ -1,0 +1,224 @@
+from __gin__ import dynamic_registration
+import cached_conv as cc
+from cached_conv import convs
+import rave
+from rave import blocks
+from rave import core
+from rave import dataset
+from rave import discriminator
+from rave import model
+from rave import pqmf
+import torch
+import torch.nn as nn
+
+# Macros:
+# ==============================================================================
+CAPACITY = 48
+DILATIONS = [[1, 3, 9], [1, 3, 9], [1, 3, 9], [1, 3]]
+KERNEL_SIZE = 3
+LATENT_SIZE = 16
+N_BAND = 16
+NOISE_AUGMENTATION = 128
+PHASE_1_DURATION = 200000
+RATIOS = [4, 2, 2, 2]
+SAMPLING_RATE = 44100
+
+# Parameters for core.AudioDistanceV1:
+# ==============================================================================
+core.AudioDistanceV1.log_epsilon = 1e-07
+core.AudioDistanceV1.multiscale_stft = @core.MultiScaleSTFT
+
+# Parameters for model.BetaWarmupCallback:
+# ==============================================================================
+model.BetaWarmupCallback.initial_value = 100
+model.BetaWarmupCallback.log = True
+model.BetaWarmupCallback.target_value = 100
+model.BetaWarmupCallback.warmup_len = 1
+
+# Parameters for pqmf.CachedPQMF:
+# ==============================================================================
+pqmf.CachedPQMF.attenuation = 100
+pqmf.CachedPQMF.n_band = %N_BAND
+
+# Parameters for discriminator.CombineDiscriminators:
+# ==============================================================================
+discriminator.CombineDiscriminators.discriminators = \
+    [@discriminator.MultiPeriodDiscriminator,
+     @discriminator.MultiScaleDiscriminator]
+
+# Parameters for cc.Conv1d:
+# ==============================================================================
+cc.Conv1d.bias = False
+
+# Parameters for scales/torch.nn.Conv1d:
+# ==============================================================================
+scales/torch.nn.Conv1d.bias = True
+scales/torch.nn.Conv1d.device = None
+scales/torch.nn.Conv1d.dilation = 1
+scales/torch.nn.Conv1d.dtype = None
+scales/torch.nn.Conv1d.groups = 1
+scales/torch.nn.Conv1d.padding = 0
+scales/torch.nn.Conv1d.padding_mode = 'zeros'
+scales/torch.nn.Conv1d.stride = 1
+
+# Parameters for periods/nn.Conv2d:
+# ==============================================================================
+periods/nn.Conv2d.bias = True
+periods/nn.Conv2d.device = None
+periods/nn.Conv2d.dilation = 1
+periods/nn.Conv2d.dtype = None
+periods/nn.Conv2d.groups = 1
+periods/nn.Conv2d.padding = 0
+periods/nn.Conv2d.padding_mode = 'zeros'
+periods/nn.Conv2d.stride = 1
+
+# Parameters for periods/discriminator.ConvNet:
+# ==============================================================================
+periods/discriminator.ConvNet.capacity = %CAPACITY
+periods/discriminator.ConvNet.conv = @nn.Conv2d
+periods/discriminator.ConvNet.kernel_size = (5, 1)
+periods/discriminator.ConvNet.n_layers = 4
+periods/discriminator.ConvNet.out_size = 1
+periods/discriminator.ConvNet.stride = 4
+
+# Parameters for scales/discriminator.ConvNet:
+# ==============================================================================
+scales/discriminator.ConvNet.capacity = %CAPACITY
+scales/discriminator.ConvNet.conv = @torch.nn.Conv1d
+scales/discriminator.ConvNet.kernel_size = 15
+scales/discriminator.ConvNet.n_layers = 4
+scales/discriminator.ConvNet.out_size = 1
+scales/discriminator.ConvNet.stride = 4
+
+# Parameters for cc.ConvTranspose1d:
+# ==============================================================================
+cc.ConvTranspose1d.bias = False
+
+# Parameters for blocks.EncoderV2:
+# ==============================================================================
+blocks.EncoderV2.adain = None
+blocks.EncoderV2.capacity = %CAPACITY
+blocks.EncoderV2.data_size = %N_BAND
+blocks.EncoderV2.dilations = %DILATIONS
+blocks.EncoderV2.keep_dim = False
+blocks.EncoderV2.kernel_size = %KERNEL_SIZE
+blocks.EncoderV2.latent_size = %LATENT_SIZE
+blocks.EncoderV2.n_out = 1
+blocks.EncoderV2.ratios = %RATIOS
+blocks.EncoderV2.recurrent_layer = None
+blocks.EncoderV2.spectrogram = None
+
+# Parameters for blocks.GeneratorV2:
+# ==============================================================================
+blocks.GeneratorV2.adain = None
+blocks.GeneratorV2.amplitude_modulation = True
+blocks.GeneratorV2.capacity = %CAPACITY
+blocks.GeneratorV2.data_size = %N_BAND
+blocks.GeneratorV2.dilations = %DILATIONS
+blocks.GeneratorV2.keep_dim = False
+blocks.GeneratorV2.kernel_size = %KERNEL_SIZE
+blocks.GeneratorV2.latent_size = @core.get_augmented_latent_size()
+blocks.GeneratorV2.noise_module = @blocks.NoiseGeneratorV2
+blocks.GeneratorV2.ratios = %RATIOS
+blocks.GeneratorV2.recurrent_layer = None
+
+# Parameters for core.get_augmented_latent_size:
+# ==============================================================================
+core.get_augmented_latent_size.latent_size = %LATENT_SIZE
+core.get_augmented_latent_size.noise_augmentation = %NOISE_AUGMENTATION
+
+# Parameters for dataset.get_dataset:
+# ==============================================================================
+# None.
+
+# Parameters for convs.get_padding:
+# ==============================================================================
+convs.get_padding.dilation = 1
+convs.get_padding.mode = 'centered'
+convs.get_padding.stride = 1
+
+# Parameters for periods/convs.get_padding:
+# ==============================================================================
+periods/convs.get_padding.dilation = 1
+
+# Parameters for scales/convs.get_padding:
+# ==============================================================================
+scales/convs.get_padding.dilation = 1
+
+# Parameters for discriminator.MultiPeriodDiscriminator:
+# ==============================================================================
+discriminator.MultiPeriodDiscriminator.convnet = @periods/discriminator.ConvNet
+discriminator.MultiPeriodDiscriminator.periods = [2, 3, 5, 7, 11]
+
+# Parameters for discriminator.MultiScaleDiscriminator:
+# ==============================================================================
+discriminator.MultiScaleDiscriminator.convnet = @scales/discriminator.ConvNet
+discriminator.MultiScaleDiscriminator.n_discriminators = 3
+
+# Parameters for core.MultiScaleSTFT:
+# ==============================================================================
+core.MultiScaleSTFT.magnitude = True
+core.MultiScaleSTFT.normalized = False
+core.MultiScaleSTFT.num_mels = None
+core.MultiScaleSTFT.sample_rate = %SAMPLING_RATE
+core.MultiScaleSTFT.scales = [2048, 1024, 512, 256, 128]
+
+# Parameters for blocks.NoiseGeneratorV2:
+# ==============================================================================
+blocks.NoiseGeneratorV2.data_size = %N_BAND
+blocks.NoiseGeneratorV2.hidden_size = 128
+blocks.NoiseGeneratorV2.noise_bands = 5
+blocks.NoiseGeneratorV2.ratios = [2, 2, 2]
+
+# Parameters for blocks.normalization:
+# ==============================================================================
+blocks.normalization.mode = 'weight_norm'
+
+# Parameters for periods/blocks.normalization:
+# ==============================================================================
+periods/blocks.normalization.mode = 'weight_norm'
+
+# Parameters for scales/blocks.normalization:
+# ==============================================================================
+scales/blocks.normalization.mode = 'weight_norm'
+
+# Parameters for model.RAVE:
+# ==============================================================================
+model.RAVE.audio_distance = @core.AudioDistanceV1
+model.RAVE.audio_monitor_epochs = 1
+model.RAVE.balancer = None
+model.RAVE.decoder = @blocks.GeneratorV2
+model.RAVE.discriminator = @discriminator.CombineDiscriminators
+model.RAVE.enable_pqmf_decode = None
+model.RAVE.enable_pqmf_encode = None
+model.RAVE.encoder = @blocks.WasserteinEncoder
+model.RAVE.feature_matching_fun = @feature_matching/core.mean_difference
+model.RAVE.gan_loss = @core.hinge_gan
+model.RAVE.input_mode = 'pqmf'
+model.RAVE.is_mel_input = None
+model.RAVE.latent_size = %LATENT_SIZE
+model.RAVE.loss_weights = None
+model.RAVE.multiband_audio_distance = @core.AudioDistanceV1
+model.RAVE.n_bands = 16
+model.RAVE.num_skipped_features = 1
+model.RAVE.output_mode = 'pqmf'
+model.RAVE.phase_1_duration = %PHASE_1_DURATION
+model.RAVE.pqmf = @pqmf.CachedPQMF
+model.RAVE.sampling_rate = %SAMPLING_RATE
+model.RAVE.spectrogram = None
+model.RAVE.update_discriminator_every = 2
+model.RAVE.valid_signal_crop = True
+model.RAVE.warmup_quantize = None
+model.RAVE.weights = \
+    {'adversarial': 2,
+     'fullband_spectral_distance': 2,
+     'multiband_spectral_distance': 2}
+
+# Parameters for dataset.split_dataset:
+# ==============================================================================
+dataset.split_dataset.max_residual = 1000
+
+# Parameters for blocks.WasserteinEncoder:
+# ==============================================================================
+blocks.WasserteinEncoder.encoder_cls = @blocks.EncoderV2
+blocks.WasserteinEncoder.noise_augmentation = %NOISE_AUGMENTATION

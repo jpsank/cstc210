@@ -1,0 +1,14 @@
+
+.DS_Store
+
+phonetic-similarity-vectors/
+RAVE/
+
+frames/
+latents/
+audio_chunks/
+datasets/
+
+*.ckpt
+*.pth
+RAVE-project/trainings/hiphop_43ef472243/version_0/events.out.tfevents.1733930026.r914u30n01.grace.ycrc.yale.edu.890333.0
