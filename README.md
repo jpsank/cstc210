@@ -46,7 +46,7 @@ After training RAVE on the hip hop mixes and the custom decoder model on Kendric
 
 ![Live Music Video Generator](screenshots/live-audio.gif)
 
-As a control, I had it generate images from the original audio of the "Alright" music video. The images are not perfect, but they contain forms and smooth motion.
+As a control, I had it generate images from the original audio of the "Alright" music video. The images show some smooth transitions between frames and recognizable forms.
 
 ![Control Music Video Generator](screenshots/control.gif)
 
