@@ -36,9 +36,9 @@ pip install acids-rave
 conda create -n RAVE2 python=3.11
 conda activate RAVE2
 pip3 install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
-pip3 install librosa opencv-python pygame torchvision tqdm pillow
+pip3 install librosa opencv-python pygame torchvision tqdm pillow click
 ```
-9. Process data with `python process_video.py` to split audio into chunks using `librosa`, extract image frames with `python-opencv`, and encode audio chunks into latent vectors using the exported RAVE model.
+9. Process data with `python preprocess_video.py` to split audio into chunks using `librosa`, extract image frames with `python-opencv`, and encode audio chunks into latent vectors using the exported RAVE model.
 10. Train custom decoder model on frames and latent vectors with `python latent-to-image.py`. This will save as a `.pth` file and generate images displayed in a live `pygame` window from audio input.
 
 ## Preliminary Results

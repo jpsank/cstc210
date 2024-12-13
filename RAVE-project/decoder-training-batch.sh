@@ -1,13 +1,14 @@
 #!/bin/bash
 
-#SBATCH -J rave-train
+#SBATCH -J decoder-train
 #SBATCH -p education_gpu
 #SBATCH --gpus=1
 #SBATCH -t 1-00:00:00
 #SBATCH --mail-type=ALL
+#SBATCH --mem=16G
 
-module purge
-module load miniconda
-conda activate ~/palmer_scratch/envs/RAVE4
-python process_video.py
-python latent-to-image.py
+python_path="$HOME/palmer_scratch/envs/RAVE4/bin/python"  # Change this to your environment's python path
+$python_path preprocess_video.py datasets/kdot/kdot.mov datasets/kdot/kdot.wav exports/hiphop_streaming.ts datasets/kdot
+$python_path preprocess_video.py datasets/allmylife/allmylife.mp4 datasets/allmylife/allmylife.wav exports/hiphop_streaming.ts datasets/allmylife
+$python_path latent-to-image.py train datasets/kdot/latents datasets/kdot/frames --epochs 60 --resume
+$python_path latent-to-image.py train datasets/allmylife/latents datasets/allmylife/frames --epochs 60 --resume
