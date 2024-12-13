@@ -15,12 +15,13 @@ RAVE or Realtime Audio Variational autoEncoder is a model for synthesizing audio
 The custom decoder model is a simple fully connected neural network in `latent-to-image.py` that expands the latent vector to a shape that can be fed into a series of deconvolutional layers. The deconvolutional layers then generate the image. The model is trained on the latent vectors extracted from a pretrained RAVE model and the corresponding image frames, as prepared in `process_video.py`.
 
 ## Pipeline
-The pipeline for this project is as follows:
-1. Download hip hop mixes from YouTube, e.g. `yt-dlp https://www.youtube.com/watch?v=IvXE-aDGOaU`, and put them in `datasets/hiphop`.
-2. Extract audio from videos using `ffmpeg -i "xxxxx.webm" -vn "xxxxx.wav"` in the `datasets/hiphop` directory.
-3. On the cluster, create a conda environment with the necessary RAVE dependencies:
+All code must be run on the HPC Cluster. You can train the models on your local machine, but it'll take forever. The pipeline for this project is as follows:
+
+### Part 1: Training RAVE
+1. Download hip hop mixes from YouTube, e.g. `yt-dlp https://www.youtube.com/watch?v=IvXE-aDGOaU`, and put them in `datasets/hiphop/`.
+2. Extract audio from videos, i.e., by running `ffmpeg -i "xxxxxxx.mp4" -vn "xxxxxxx.wav"` in the `datasets/hiphop/` directory.
+3. Create a conda environment with the necessary RAVE dependencies:
 ```
-salloc -p education_gpu -t 2:00:00 --gpus=1
 module load miniconda
 conda create -n RAVE python=3.9
 conda activate RAVE
@@ -28,18 +29,21 @@ conda install ffmpeg sox -y
 pip install acids-rave
 ```
 4. Clone RAVE from GitHub with `git clone https://github.com/acids-ircam/RAVE.git`.
-5. Preprocess audio using RAVE with `rave preprocess --input_path datasets/hiphop --output_path preprocessed/hiphop`.
-6. Start an HPC slurm job to train RAVE on the preprocessed audio with `sbatch RAVE-training-batch.sh`.
-7. After training, export the RAVE model with `rave export --name hiphop --run trainings/hiphop/hiphop_43ef472243/ --streaming True --output exports/`.
-8. For the custom decoder model, make a new conda environment with the necessary dependencies on HPC for CUDA support:
+5. Preprocess audio using RAVE with `rave preprocess --input_path datasets/hiphop --output_path preprocessed/hiphop/`.
+6. Start a slurm job to train RAVE on the preprocessed audio with `sbatch RAVE-training-batch.sh`.
+7. After the job finishes, export the RAVE model with `rave export --name hiphop --run trainings/hiphop/hiphop_xxxxxxxxxx/ --streaming True --output exports/`. The exported model will be saved as a `.ts` file.
+
+### Part 2: Training Custom Decoder Model
+1. Download music videos from YouTube, e.g. `yt-dlp https://www.youtube.com/watch?v=Z-48u_uWMHY`, and put them in a folder in `datasets/`.
+2. Make a new conda environment with the necessary dependencies for CUDA support (I just installed everything with pip because it's easier):
 ```
 conda create -n RAVE2 python=3.11
 conda activate RAVE2
 pip3 install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
 pip3 install librosa opencv-python pygame torchvision tqdm pillow click
 ```
-9. Process data with `python preprocess_video.py` to split audio into chunks using `librosa`, extract image frames with `python-opencv`, and encode audio chunks into latent vectors using the exported RAVE model.
-10. Train custom decoder model on frames and latent vectors with `python latent-to-image.py`. This will save as a `.pth` file and generate images displayed in a live `pygame` window from audio input.
+1. Edit `decoder-training-batch.sh` to point to the correct dataset, environment, and RAVE model paths, then run `sbatch decoder-training-batch.sh` to start a slurm job. This will run `preprocess_video.py` and `latent-to-image.py train` in sequence. The `preprocess_video.py` script will extract image frames and encode the corresponding audio chunks into latent vectors using the exported RAVE model. The `latent-to-image.py train` script will train the custom decoder model on the latent vectors and image frames. The model will be saved as a `.pth` file.
+2. After the job finishes, to generate images from audio input, run `python latent-to-image.py demo` with the path to the `.pth` file and the path to the exported RAVE model from Part 1.
 
 ## Preliminary Results
 After training RAVE on the hip hop mixes and the custom decoder model on Kendrick Lamar's "Alright" music video, I was able to generate images from audio input. The quality of the images is not great, but it's a start. The custom decoder model is not trained for very long (only 20 epochs). The images are generated in real time from audio input, so it's a proof of concept that the pipeline works.

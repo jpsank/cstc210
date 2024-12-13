@@ -215,12 +215,13 @@ def train(latent_dir, image_dir, latent_dim, img_channels, img_size, batch_size,
 
 @cli.command("demo")
 @click.argument("model_path", type=click.Path(exists=True))
+@click.argument("rave_model_path", type=click.Path(exists=True))
 @click.option("--img_size", type=int, default=256, help="Image size (e.g., 256x256)")
 @click.option("--latent_dim", type=int, default=16, help="Dimension of RAVE latent space")
 @click.option("--img_channels", type=int, default=3, help="Number of image channels (e.g., 3 for RGB)")
 @click.option("--latent_dir", type=click.Path(exists=True), help="Directory containing latent vectors", required=False)
 @click.option("--audio_file", type=click.Path(exists=True), help="Audio file for live demo", required=False)
-def demo(model_path, img_size, latent_dim, img_channels, latent_dir, audio_file):
+def demo(model_path, rave_model_path, img_size, latent_dim, img_channels, latent_dir, audio_file):
     import sounddevice as sd
     import pygame
 
@@ -232,8 +233,7 @@ def demo(model_path, img_size, latent_dim, img_channels, latent_dir, audio_file)
     model.load_state_dict(torch.load(model_path, map_location=device))
 
     # Load RAVE model
-    model_path = "exports/hiphop_streaming.ts"
-    rave_model = torch.jit.load(model_path).to(device)
+    rave_model = torch.jit.load(rave_model_path).to(device)
     rave_model.eval()
 
     # Run interactive demo
@@ -290,22 +290,25 @@ def demo(model_path, img_size, latent_dim, img_channels, latent_dir, audio_file)
         audio = audio.mean(dim=0, keepdim=True) # Average the channels
 
         # Chunk size for audio processing (1 second per chunk)
-        fps = 60
-        chunk_size = rave_model.sr // fps
+        fps = 29
 
         # Play audio and process simultaneously
         print("Playing audio and generating images...")
         done = False
-        start_idx = 0
+        start_time = time.time()
+        last_time = start_time
         sd.play(audio.squeeze(0).cpu().numpy(), samplerate=rave_model.sr, blocking=False)
-        while start_idx < audio.shape[1] and not done:
+        while not done:
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_q:
                     done = True
 
+            # Calculate elapsed time
+            elapsed_time = time.time() - start_time
+            last_elapsed_time = last_time - start_time
+
             # Extract audio chunk
-            end_idx = min(start_idx + chunk_size, audio.shape[1])
-            audio_chunk = audio[:, start_idx:end_idx]
+            audio_chunk = audio[:, int(last_elapsed_time * rave_model.sr):int(elapsed_time * rave_model.sr)]
             audio_chunk = audio_chunk.to(device).unsqueeze(0) # Add batch dimension
             # print("Audio chunk shape:", audio_chunk.shape)
 
@@ -322,12 +325,14 @@ def demo(model_path, img_size, latent_dim, img_channels, latent_dir, audio_file)
             pygame.surfarray.blit_array(screen, generated_image)
             pygame.display.flip()
 
+            # Update last time
+            last_time = time.time()
+
             # Update indices and maintain sync
-            start_idx += chunk_size
             clock.tick(fps)
 
     # Test on live audio
-    fps = 60
+    fps = 29
     done = False
     while not done:
         for event in pygame.event.get():
@@ -369,6 +374,6 @@ if __name__ == "__main__":
 """
 Usage:
 python latent-to-image.py train datasets/kdot/latents datasets/kdot/frames --latent_dim 16 --img_channels 3 --img_size 256 --batch_size 16 --epochs 20 --save_path latent_to_image_model.pth
-python latent-to-image.py demo latent_to_image_model.pth --img_size 256 --latent_dir datasets/kdot/latents
-python latent-to-image.py demo latent_to_image_model.pth --audio_file datasets/allmylife/allmylife.wav
+python latent-to-image.py demo latent_to_image_model.pth exports/hiphop_streaming.ts --latent_dir datasets/kdot/latents
+python latent-to-image.py demo latent_to_image_model.pth exports/hiphop_streaming.ts --audio_file datasets/allmylife/allmylife.wav
 """

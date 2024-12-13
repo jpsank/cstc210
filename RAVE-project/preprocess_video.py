@@ -20,22 +20,14 @@ def main(video_path, audio_path, rave_model_path, output_dir, only_latents=False
     """
     # Ensure output directories exist
     frames_dir = os.path.join(output_dir, "frames")
-    audio_chunks_dir = os.path.join(output_dir, "audio_chunks")
     latents_dir = os.path.join(output_dir, "latents")
     os.makedirs(frames_dir, exist_ok=True)
-    os.makedirs(audio_chunks_dir, exist_ok=True)
     os.makedirs(latents_dir, exist_ok=True)
 
     # Load RAVE model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     rave_model = torch.jit.load(rave_model_path).to(device)
     target_sr = rave_model.sr
-
-    # Create output directories
-    frames_dir = os.path.join(output_dir, "frames")
-    audio_chunks_dir = os.path.join(output_dir, "audio_chunks")
-    os.makedirs(frames_dir, exist_ok=True)
-    os.makedirs(audio_chunks_dir, exist_ok=True)
 
     # Open video and get metadata
     cap = cv2.VideoCapture(video_path)
