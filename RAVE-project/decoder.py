@@ -27,7 +27,7 @@ class StatefulRNNDecoder(nn.Module):
         self.rnn = nn.GRU(latent_dim, self.hidden_dim, batch_first=True)
         self.hidden_state = None
 
-        # Fully connected layers and deconv (as before)
+        # Fully connected layers and deconv
         self.fc = nn.Sequential(
             nn.Linear(self.hidden_dim, 512),
             nn.ReLU(),
