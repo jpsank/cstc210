@@ -11,16 +11,18 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import click
+from torchvision.models import vgg16, VGG16_Weights
+import subprocess
 
 
 # Define the RNN-based encoder
 class StatefulRNNDecoder(nn.Module):
-    def __init__(self, latent_dim, img_size, img_channels):
+    def __init__(self, latent_dim=16, img_size=256, img_channels=3, hidden_dim=32):
         super().__init__()
         self.latent_dim = latent_dim
         self.img_size = img_size
         self.img_channels = img_channels
-        self.hidden_dim = latent_dim * 2 # Hidden state size
+        self.hidden_dim = hidden_dim
 
         self.rnn = nn.GRU(latent_dim, self.hidden_dim, batch_first=True)
         self.hidden_state = None
@@ -102,10 +104,9 @@ class LatentImageDataset(Dataset):
 
             # Load image
             image = Image.open(image_path).convert("RGB")
-            # Center crop to minimum dimension
-            min_dim = min(image.size)
-            image = transforms.CenterCrop(min_dim)(image)
-            # Resize to 256x256 and make tensor
+            # # Center crop to minimum dimension
+            # min_dim = min(image.size)
+            # image = transforms.CenterCrop(min_dim)(image)
             if self.transform:
                 image = self.transform(image)
             self.images[idx] = image
@@ -150,7 +151,7 @@ def cli():
 @click.option("--img_size", type=int, default=256, help="Image size (e.g., 256x256)")
 @click.option("--batch_size", type=int, default=16, help="Batch size for training")
 @click.option("--epochs", type=int, default=20, help="Number of training epochs")
-@click.option("--save_path", type=click.Path(), default="latent_to_image_model.pth", help="Path to save trained model")
+@click.option("--save_path", type=click.Path(), default="decoder_model.pth", help="Path to save trained model")
 @click.option("--resume", is_flag=True, help="Resume training from existing model", default=False)
 def train(latent_dir, image_dir, latent_dim, img_channels, img_size, batch_size, epochs, save_path, resume):
     # Set device
@@ -163,9 +164,9 @@ def train(latent_dir, image_dir, latent_dim, img_channels, img_size, batch_size,
 
     # Transform for images
     transform = transforms.Compose([
-        transforms.Resize((img_size, img_size)),
+        # transforms.Resize((img_size, img_size)),
         transforms.ToTensor(),
-        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])  # Normalize to [-1, 1]
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) # Normalize to [-1, 1]
     ])
 
     # Dataset and DataLoader
@@ -173,17 +174,39 @@ def train(latent_dir, image_dir, latent_dim, img_channels, img_size, batch_size,
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
     # Display some sample images
-    sample_latent, sample_image = dataset[300]
-    sample_image = sample_image.permute(1, 2, 0).numpy()
-    sample_image = (sample_image + 1) / 2
-    plt.imshow(sample_image)
-    plt.axis("off")
-    plt.show()
+    # sample_latent, sample_image = dataset[300]
+    # sample_image = sample_image.permute(1, 2, 0).numpy()
+    # sample_image = (sample_image + 1) / 2
+    # plt.imshow(sample_image)
+    # plt.axis("off")
+    # plt.show()
 
     # Train model
     print("Training model...")
     optimizer = optim.Adam(model.parameters(), lr=0.0002)
-    loss_fn = nn.MSELoss()  # Reconstruction loss
+
+    # # Normalization for VGG16
+    # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
+    # # Perceptual loss using VGG16 features
+    # weights = VGG16_Weights.DEFAULT
+    # vgg = vgg16(weights=weights).features[:23].to(device).eval()
+    # for param in vgg.parameters():
+    #     param.requires_grad = False
+
+    # def perceptual_loss(pred, target):
+    #     pred = normalize(pred)
+    #     target = normalize(target)
+    #     pred_features = vgg(pred)
+    #     target_features = vgg(target)
+    #     return nn.MSELoss()(pred_features, target_features)
+
+    # # Combined loss function
+    # mse_loss = nn.MSELoss()
+    # def loss_fn(pred, target):
+    #     return 0.7 * mse_loss(pred, target) + 0.5 * perceptual_loss(pred, target)
+    loss_fn = nn.MSELoss()
+    
     model.train()
 
     for epoch in range(epochs):
@@ -221,9 +244,8 @@ def train(latent_dir, image_dir, latent_dim, img_channels, img_size, batch_size,
 @click.option("--img_channels", type=int, default=3, help="Number of image channels (e.g., 3 for RGB)")
 @click.option("--latent_dir", type=click.Path(exists=True), help="Directory containing latent vectors", required=False)
 @click.option("--audio_file", type=click.Path(exists=True), help="Audio file for live demo", required=False)
-def demo(model_path, rave_model_path, img_size, latent_dim, img_channels, latent_dir, audio_file):
-    import sounddevice as sd
-    import pygame
+@click.option("--reproduce", type=click.Path(exists=True), help="Reproduce video from a specific audio file", required=False)
+def demo(model_path, rave_model_path, img_size, latent_dim, img_channels, latent_dir, audio_file, reproduce):
 
     # Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -236,7 +258,66 @@ def demo(model_path, rave_model_path, img_size, latent_dim, img_channels, latent
     rave_model = torch.jit.load(rave_model_path).to(device)
     rave_model.eval()
 
+    # Sample one latent vector, generate image, and save to file
+    latent = torch.randn(1, latent_dim, 1, device=device)
+    generated_image = evaluate(model, latent, device)
+    generated_image = generated_image.squeeze(0).permute(1, 2, 0).cpu().numpy()
+    generated_image = (1 + generated_image) / 2 # Denormalize
+    generated_image = (generated_image * 255).astype(np.uint8)
+    with open("demo_image.jpg", "wb") as f:
+        Image.fromarray(generated_image).save(f, format="JPEG")
+    
+    if reproduce:
+        import torchaudio
+        import cv2
+
+        # Load audio file
+        audio, sr = torchaudio.load(reproduce)
+        audio = audio.to(device)
+        if sr != rave_model.sr:
+            audio = torchaudio.functional.resample(audio, sr, rave_model.sr)
+
+        # Flatten audio channels
+        audio = audio.mean(dim=0, keepdim=True)
+        # audio = audio[:, :rave_model.sr * 30]
+
+        # Chunk size for audio processing (1 second per chunk)
+        fps = 24
+
+        # Generate images from audio
+        print("Generating images...")
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')  # Codec for AVI files
+        video_writer = cv2.VideoWriter("tmp.avi", fourcc, fps, (img_size, img_size))
+        for frame_idx in tqdm(range(audio.size(1) // (rave_model.sr // fps)), desc="Generating images"):
+            # Extract corresponding audio chunk
+            chunk = audio[:, frame_idx * (rave_model.sr // fps):(frame_idx + 1) * (rave_model.sr // fps)]
+            chunk = chunk.unsqueeze(0)
+        
+            # Encode audio into latents
+            latent = rave_model.encode(chunk)
+            latent = latent.to(device)
+            with torch.no_grad():
+                img = evaluate(model, latent, device)
+                img = img.squeeze(0)
+                img = img.permute(1, 2, 0)
+                img = img.cpu().numpy()
+            img = (1 + img) / 2
+            img = (255 * img).astype(np.uint8)
+            video_writer.write(img)
+
+        video_writer.release()
+
+        # Combine video and audio
+        print("Combining video and audio...")
+        subprocess.run(["ffmpeg", "-y", "-i", "tmp.avi", "-i", reproduce, "-c:v", "copy", "-c:a", "aac", "-strict", "experimental", "reproduced_video.mp4"])
+
+        # Clean up
+        os.remove("tmp.avi")
+        print("Reproduced video saved as 'reproduced_video.mp4'.")
+
     # Run interactive demo
+    import sounddevice as sd
+    import pygame
     pygame.init()
     screen = pygame.display.set_mode((img_size, img_size))
     clock = pygame.time.Clock()
@@ -261,7 +342,7 @@ def demo(model_path, rave_model_path, img_size, latent_dim, img_channels, latent
             # Generate image using latent decoder
             generated_image = evaluate(model, latent, device)
             generated_image = generated_image.squeeze(0).permute(1, 2, 0).cpu().numpy()
-            generated_image = (generated_image + 1) / 2
+            generated_image = (1 + generated_image) / 2
             generated_image = (generated_image * 255).astype(np.uint8)
 
             # # Generate audio using RAVE model
@@ -334,12 +415,14 @@ def demo(model_path, rave_model_path, img_size, latent_dim, img_channels, latent
     # Test on live audio
     fps = 29
     done = False
-    while not done:
+    while True:
         for event in pygame.event.get():
             # Press q to quit
             if event.type == pygame.KEYDOWN and event.key == pygame.K_q:
-                pygame.quit()
                 done = True
+        
+        if done:
+            break
         
         # Record audio from microphone
         indata = sd.rec(rave_model.sr // fps, samplerate=rave_model.sr, channels=1, dtype='float32', blocking=True)
@@ -356,7 +439,7 @@ def demo(model_path, rave_model_path, img_size, latent_dim, img_channels, latent
         # Generate image
         generated_image = evaluate(model, latent, device)
         generated_image = generated_image.squeeze(0).permute(1, 2, 0).cpu().numpy()
-        generated_image = (generated_image + 1) / 2
+        generated_image = (1 + generated_image) / 2
         generated_image = (generated_image * 255).astype(np.uint8)
 
         # Display image
@@ -368,12 +451,39 @@ def demo(model_path, rave_model_path, img_size, latent_dim, img_channels, latent
     pygame.quit()
 
 
+@cli.command("export")
+@click.argument("model_path", type=click.Path(exists=True))
+@click.argument("rave_model_path", type=click.Path(exists=True))
+@click.argument("output_path", type=click.Path())
+@click.option("--img_size", type=int, default=256, help="Image size (e.g., 256x256)")
+@click.option("--latent_dim", type=int, default=16, help="Dimension of RAVE latent space")
+@click.option("--img_channels", type=int, default=3, help="Number of image channels (e.g., 3 for RGB)")
+def export(model_path, rave_model_path, output_path, img_size, latent_dim, img_channels):
+    # Set device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Load model for evaluation
+    model = StatefulRNNDecoder(latent_dim, img_size=img_size, img_channels=img_channels).to(device)
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.eval()
+
+    # Load RAVE model
+    rave_model = torch.jit.load(rave_model_path).to(device)
+    rave_model.eval()
+
+    # Export model
+    example_latent = torch.randn(1, latent_dim, 1, device=device)
+    traced_model = torch.jit.trace(model, example_latent)
+    traced_model.save(output_path)
+
+    print(f"Model exported to {output_path}.")
+
 if __name__ == "__main__":
     cli()
 
 """
 Usage:
-python latent-to-image.py train datasets/kdot/latents datasets/kdot/frames --latent_dim 16 --img_channels 3 --img_size 256 --batch_size 16 --epochs 20 --save_path latent_to_image_model.pth
-python latent-to-image.py demo latent_to_image_model.pth exports/hiphop_streaming.ts --latent_dir datasets/kdot/latents
-python latent-to-image.py demo latent_to_image_model.pth exports/hiphop_streaming.ts --audio_file datasets/allmylife/allmylife.wav
+python decoder.py train datasets/kdot/latents datasets/kdot/frames --latent_dim 16 --img_channels 3 --img_size 256 --batch_size 16 --epochs 20 --save_path decoder_model.pth
+python decoder.py demo decoder_model.pth exports/hiphop_streaming.ts --latent_dir datasets/kdot/latents
+python decoder.py demo decoder_model.pth exports/hiphop_streaming.ts --audio_file datasets/allmylife/allmylife.wav
 """

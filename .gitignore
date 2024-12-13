@@ -1,5 +1,6 @@
 
 .DS_Store
+__pycache__/
 
 phonetic-similarity-vectors/
 RAVE/
@@ -9,6 +10,8 @@ latents/
 audio_chunks/
 datasets/
 
+*.mp4
+*.jpg
 *.ckpt
 *.pth
 RAVE-project/trainings/hiphop_43ef472243/version_0/events.out.tfevents.1733930026.r914u30n01.grace.ycrc.yale.edu.890333.0

@@ -13,8 +13,9 @@ import click
 @click.argument("audio_path", type=click.Path(exists=True))
 @click.argument("rave_model_path", type=click.Path(exists=True))
 @click.argument("output_dir", type=click.Path())
+@click.option("--img-size", type=int, default=256, help="Size of the image frames", show_default=True)
 @click.option("--only-latents", is_flag=True, help="Skip frame extraction and audio splitting", default=False)
-def main(video_path, audio_path, rave_model_path, output_dir, only_latents=False):
+def main(video_path, audio_path, rave_model_path, output_dir, img_size, only_latents):
     """
     Preprocess video and audio data for decoder model training.
     """
@@ -34,6 +35,23 @@ def main(video_path, audio_path, rave_model_path, output_dir, only_latents=False
     fps = int(cap.get(cv2.CAP_PROP_FPS))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
+    # Function to center crop and save a frame
+    def process_frame(frame, frame_idx):
+        h, w = frame.shape[:2]
+        if h < w:
+            crop_size = h
+            x0 = (w - h) // 2
+            y0 = 0
+        else:
+            crop_size = w
+            x0 = 0
+            y0 = (h - w) // 2
+        frame = frame[y0:y0+crop_size, x0:x0+crop_size]
+        frame = cv2.resize(frame, (img_size, img_size))
+        frame_path = os.path.join(frames_dir, f"frame_{frame_idx:04d}.jpg")
+        cv2.imwrite(frame_path, frame)
+
+
     if not only_latents:
         # Multithreaded frame extraction
         print("Extracting video frames...")
@@ -43,8 +61,7 @@ def main(video_path, audio_path, rave_model_path, output_dir, only_latents=False
         with ThreadPoolExecutor(max_workers=8) as executor:
             while success:
                 # Save the current frame
-                frame_path = os.path.join(frames_dir, f"frame_{frame_idx:04d}.jpg")
-                tasks.append(executor.submit(cv2.imwrite, frame_path, frame))
+                tasks.append(executor.submit(process_frame, frame.copy(), frame_idx))
                 frame_idx += 1
 
                 # Read the next frame
